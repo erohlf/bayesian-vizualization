@@ -1,0 +1,406 @@
+---
+title: "415 Final Project"
+author: "Michael Gates, Ethan Rohlf, Cameron Hakala"
+date: "March 10, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(shiny)
+
+ui <- fluidPage(
+  
+  wellPanel(
+  
+  # Prior input 
+ selectInput(inputId = "Prior_Dist", label = "Prior Distribution", choices = c(Beta = "Beta", Normal = "Normal", Gamma = "Gamma")),
+  
+  ##Data input - Beta
+  conditionalPanel(
+    condition = "input.Prior_Dist == 'Beta'",
+    wellPanel("Prior Paramters",
+      numericInput("alpha", label = "Alpha", value = 1),
+      numericInput("beta", label = "Beta", value = 1)
+     ),
+      selectInput(inputId = "data_beta", label = "Data Distribution", choices = c("", Binomial = "Binomial", "Negative Binomial")),
+    #Beta-Binomial Data
+   conditionalPanel( 
+    condition = "input.data_beta == 'Binomial'",
+    wellPanel("Data Observed",
+      numericInput("mean_binom", label = "Mean", value = 1),
+      numericInput("n_binom", label = "Sample Size", value = 1)
+     )),
+  
+  #Beta-N_Binom Data
+   conditionalPanel(
+    condition = "input.data_beta == 'Negative Binomial'",
+    wellPanel("Data Observed",
+      numericInput("trials", label = "Number of Trials", value = 1),
+      numericInput("success", label = "Number of Successes", value = 1)
+     ))),
+  
+ ##Data input - Gamma
+  conditionalPanel(
+    condition = "input.Prior_Dist == 'Gamma'",
+    wellPanel("Prior Parameters",
+      numericInput("alpha_g", label = "Alpha", value = 1),
+      numericInput("lambda", label = "Lambda", value = 1)
+     ),
+      selectInput(inputId = "data_gamma", label = "Data Distribution", choices = c("", Exponential = "Exponential", Poisson = "Poisson")),
+    #Gamma-Possion Data
+   conditionalPanel(
+    condition = "input.data_gamma == 'Poisson'", 
+    wellPanel("Data Observed",
+      numericInput("mean_pois", label = "Mean", value = 1),
+      numericInput("n_pois", label = "Sample Size", value = 1)
+     )),
+  
+  #Gamma-Exponential Data
+   conditionalPanel(
+    condition = "input.data_gamma == 'Exponential'", 
+    wellPanel("Data Observed",
+      numericInput("mean_exp", label = "Mean", value = 1),
+      numericInput("n_exp", label = "Sample Size", value = 1)
+     ))),
+                  
+  ##Data input - Normal
+  conditionalPanel(
+    condition = "input.Prior_Dist == 'Normal'",
+    wellPanel("Prior Paramters",
+      numericInput("mu0", label = "Mu 0", value = 1),
+      numericInput("sigma", label = "Population Standard Deviation", value = 1),
+      numericInput("tau0", label = "Tau 0", value = 1)
+      ),
+      selectInput(inputId = "data_normal", label = "Data Distribution", choices = c("", Normal = "Normal")),
+    #Normal-Normal Data
+   conditionalPanel(
+    condition = "input.data_normal == 'Normal'",
+    wellPanel("Data Observed",
+      numericInput("mean_data", label = "Mean", value = 1),
+      numericInput("n_norm", label = "n", value = 1)
+     )))
+  
+  
+   ),
+ 
+
+  # Outputs
+ 
+ mainPanel(
+   
+   #Norm-norm graph
+   conditionalPanel(
+   condition = "input.Prior_Dist == 'Normal'",
+   plotOutput("norm_norm")
+   ),
+ 
+   #Gamma-pois 
+   conditionalPanel(
+     condition = "input.data_gamma == 'Poisson' && input.Prior_Dist == 'Gamma'",
+     plotOutput("gamma_pois")
+     ),
+ 
+   #Gamma-exp
+   conditionalPanel(
+     condition = "input.data_gamma == 'Exponential' && input.Prior_Dist == 'Gamma'",
+     plotOutput("gamma_exp")
+     ),
+   
+   #Beta-binom
+   conditionalPanel(
+     condition = "input.data_beta == 'Binomial' && input.Prior_Dist == 'Beta'",
+     plotOutput("beta_binom")
+     ),
+   
+   #Beta-Nbinom
+   conditionalPanel(
+     condition = "input.data_beta == 'Negative Binomial' && input.Prior_Dist == 'Beta'",
+     plotOutput("beta_neg")
+   )
+ 
+ ),
+ 
+ mainPanel(
+   
+   #Normal Posterior Predictive
+   conditionalPanel(
+     condition = "input.Prior_Dist == 'Normal'",
+     plotOutput("norm_pred")
+   ),
+   
+   #Gamma-pois posterior pred
+   conditionalPanel(
+     condition = "input.data_gamma == 'Poisson' && input.Prior_Dist == 'Gamma'",
+     plotOutput("gamma_p_pred")
+     ),
+   
+   #Gamma-exp posterior pred
+   conditionalPanel(
+     condition = "input.data_gamma == 'Exponential' && input.Prior_Dist == 'Gamma'",
+     plotOutput("gamma_e_pred")
+   ),
+   
+   #Beta-Binom Post Pred
+   conditionalPanel(
+     condition = "input.data_beta == 'Binomial' && input.Prior_Dist == 'Beta'",
+     plotOutput("beta_binom_pred")
+   ),
+   
+   #Beta-neg Post Pred
+   conditionalPanel(
+     condition = "input.data_beta == 'Negative Binomial' && input.Prior_Dist == 'Beta'",
+     plotOutput("beta_neg_pred")
+   )
+   
+ )
+ 
+  
+
+  
+)
+
+server <- function(input, output){
+  
+##Norm-Norm plot
+output$norm_norm <- renderPlot({
+  
+#prior
+theta = seq(input$mu0-4*input$tau0, input$mu0+4*input$tau0, 0.0001)
+prior = dnorm(theta, input$mu0, input$tau0)
+precision = (1/input$tau0^2 + input$n_norm/input$sigma^2)
+tau = sqrt(1/precision)
+mu = (((1/input$tau0^2)*input$mu0 + (input$n_norm/input$sigma^2)*input$mean_data) / precision)
+
+
+#likelihood
+likelihood = dnorm(input$mean_data, theta, input$sigma/sqrt(input$n_norm))
+
+#posterior
+posterior = dnorm(theta, mu, tau)
+
+#plot
+ymax = dnorm(mu, mu, tau)
+scaled_likelihood = likelihood * ymax / max(likelihood)
+xlims = range(theta)
+
+plot(theta, prior, type='l', col='orange', xlim=xlims, ylim=c(0, ymax), ylab='', yaxt='n')
+par(new=T)
+plot(theta, scaled_likelihood, type='l', col='skyblue', xlim=xlims, ylim=c(0, ymax), ylab='',  yaxt='n')
+par(new=T)
+plot(theta, posterior, type='l', col='seagreen', xlim=xlims, ylim=c(0, ymax), ylab='', yaxt='n')
+legend("topright", c("prior", "scaled likelihood", "posterior"), lty=1, col=c("orange", "skyblue", "seagreen"))
+  
+})
+
+##Gamma-Pois
+output$gamma_pois <- renderPlot({
+  
+  #prior
+  theta = seq(0, input$alpha_g/input$lambda + 10*sqrt(input$alpha_g/input$lambda^2), 0.0001)
+  prior = dgamma(theta, shape=input$alpha_g, rate=input$lambda)
+  
+  # likelihood
+  likelihood = dpois(input$n_pois*input$mean_pois, input$n_pois*theta)
+
+  # posterior
+  alpha_pois = input$alpha_g + input$n_pois*input$mean_pois
+  lambda_pois = input$lambda + input$n_pois
+  posterior = dgamma(theta,  shape=alpha_pois, rate=lambda_pois)
+
+  # plot
+  ymax = max(posterior, prior, likelihood)
+  scaled_likelihood = likelihood * ymax / max(likelihood)
+  xlims = range(theta)
+
+  plot(theta, prior, type='l', col='orange', xlim=xlims, ylim=c(0, ymax), ylab='', yaxt='n')
+  par(new=T)
+  plot(theta, scaled_likelihood, type='l', col='skyblue', xlim=xlims, ylim=c(0, ymax), ylab='',  yaxt='n')
+  par(new=T)
+  plot(theta, posterior, type='l', col='seagreen', xlim=xlims, ylim=c(0, ymax), ylab='', yaxt='n',                     main=paste("Posterior: shape=",alpha_pois,", rate=",lambda_pois))
+  legend("topright", c("prior", "scaled likelihood", "posterior"), lty=1, col=c("orange", "skyblue", "seagreen"))
+  
+})
+
+##Gamma-Exp
+output$gamma_exp <- renderPlot({
+
+#prior
+theta = seq(0.0001, input$alpha_g/input$lambda*2, 0.0001)
+prior = dgamma(theta, shape=input$alpha_g, rate=input$lambda)
+
+# likelihood
+likelihood = dgamma(input$n_exp*input$mean_exp, shape=input$n_exp, rate=theta)
+
+# posterior
+alpha_exp = input$alpha_g + input$n_exp
+lambda_exp = input$lambda + input$n_exp*input$mean_exp
+posterior = dgamma(theta,  shape=alpha_exp, rate=lambda_exp)
+
+# plot
+xmax = max(posterior, prior, likelihood, theta)
+ymax = max(posterior, prior, likelihood)
+scaled_likelihood = likelihood * ymax / max(likelihood)
+xlims = range(theta)
+
+plot(theta, prior, type='l', col='orange', xlim=xlims, ylim=c(0, ymax), ylab='', yaxt='n', xaxt='n')
+par(new=T)
+plot(theta, scaled_likelihood, type='l', col='skyblue', xlim=xlims, ylim=c(0, ymax), ylab='',  yaxt='n', xaxt='n')
+par(new=T)
+plot(theta, posterior, type='l', col='seagreen', xlim=xlims, ylim=c(0, ymax), ylab='', yaxt='n', xaxt='n', main=paste("Posterior: shape=",alpha_exp,", rate=",lambda_exp))
+legend("topright", c("prior", "scaled likelihood", "posterior"), lty=1, col=c("orange", "skyblue", "seagreen"))
+axis(1, seq(0, max(theta), max(theta)/10))
+
+  
+})
+
+##Beta-Binom
+output$beta_binom <- renderPlot({
+
+#Prior
+theta = seq(0, 1, 0.0001)
+prior = dbeta(theta, input$alpha, input$beta)
+
+# likelihood
+likelihood = dbinom(input$mean_binom, input$n_binom, theta)
+
+# posterior
+alpha_binom = input$alpha + input$mean_binom
+beta_binom = input$beta + input$n_binom - input$mean_binom
+posterior = dbeta(theta, alpha, beta)
+
+# plot
+ymax = max(dbeta((alpha_binom-1)/(alpha_binom+beta_binom-2), alpha, beta), posterior, likelihood, prior)
+scaled_likelihood = likelihood * ymax / max(likelihood)
+
+
+plot(theta, prior, type='l', col='orange', xlim=c(0, 1), ylim=c(0, ymax), ylab='', yaxt='n')
+par(new=T)
+plot(theta, scaled_likelihood, type='l', col='skyblue', xlim=c(0, 1), ylim=c(0, ymax), ylab='',  yaxt='n')
+par(new=T)
+plot(theta, posterior, type='l', col='seagreen', xlim=c(0, 1), ylim=c(0, ymax), ylab='', yaxt='n')
+legend("topleft", c("prior", "scaled likelihood", "posterior"), lty=1, col=c("orange", "skyblue", "seagreen"))
+})
+
+##Beta-Negative Binom
+output$beta_neg <- renderPlot({
+
+#Prior
+theta = seq(0.0001, 1, 0.0001)
+prior = dbeta(theta, input$alpha, input$beta)
+
+# likelihood
+likelihood = dnbinom(input$trials, input$success, prob = theta)
+
+#posterior
+alpha_neg = input$alpha + input$success
+beta_neg = input$beta + input$trials
+posterior = dbeta(theta, alpha_neg, beta_neg)
+
+#plot
+ymax = max(dbeta((alpha_neg-1)/(alpha_neg+beta_neg-2), alpha, beta), posterior, prior, likelihood)
+scaled_likelihood = likelihood * ymax / max(likelihood)
+xlims = range(theta)
+
+plot(theta, prior, type='l', col='orange', xlim=c(0, 1), ylim=c(0, ymax), ylab='', yaxt='n')
+par(new=T)
+plot(theta, scaled_likelihood, type='l', col='skyblue', xlim=c(0, 1), ylim=c(0, ymax), ylab='',  yaxt='n')
+par(new=T)
+plot(theta, posterior, type='l', col='seagreen', xlim=c(0, 1), ylim=c(0, ymax), ylab='', yaxt='n')
+legend("topleft", c("prior", "scaled likelihood", "posterior"), lty=1, col=c("orange", "skyblue", "seagreen"))
+})
+
+##Normal Posterior Predictive
+
+output$norm_pred <- renderPlot({
+
+precision = (1/input$tau0^2 + input$n_norm/input$sigma^2)
+tau = sqrt(1/precision)
+tau_reactive <- (reactive({sqrt(1/precision)}))
+mu = (((1/input$tau0^2)*input$mu0 + (input$n_norm/input$sigma^2)*input$mean_data) / precision)
+mu_reactive <- reactive({(((1/input$tau0^2)*input$mu0 + (input$n_norm/input$sigma^2)*input$mean_data) / precision)})
+  
+Nrep = 10000
+
+thetas = rnorm(Nrep, mu_reactive(), tau_reactive())
+
+ys = rnorm(Nrep, thetas, input$sigma)
+
+hist(ys, main= "Posterior Predictive Distribution")
+  
+})
+  
+##Gamma-Pois Posterior Pred
+output$gamma_p_pred <- renderPlot({
+  
+Nrep = 10000
+
+alpha_pois = input$alpha_g + input$n_pois*input$mean_pois
+lambda_pois = input$lambda + input$n_pois
+
+thetas = rgamma(Nrep, alpha_pois, lambda_pois)
+
+ys = rpois(Nrep, thetas)
+
+hist(ys, main = "Posterior Predictive Distribution")
+
+})
+
+##Gamma-Exp Posterior Pred
+output$gamma_e_pred <- renderPlot({
+  
+Nrep = 10000
+
+alpha_exp = input$alpha_g + input$n_exp
+lambda_exp = input$lambda + input$n_exp*input$mean_exp
+
+thetas = rgamma(Nrep, alpha_exp, lambda_exp)
+
+ys = rexp(Nrep, thetas)
+
+hist(ys)
+})
+
+##Beta-Binom Posterior Predictive
+output$beta_binom_pred <- renderPlot({
+
+Nrep = 10000
+
+alpha_binom = input$alpha + input$mean_binom
+beta_binom = input$beta + input$n_binom - input$mean_binom
+
+thetas = rbeta(Nrep, alpha_binom, beta_binom)
+
+ys = rbinom(Nrep, input$n_binom, thetas)
+
+hist(ys)
+})
+
+##Beta-neg Posterior Predictive
+output$beta_neg_pred <- renderPlot({
+
+Nrep = 10000
+
+alpha_neg = input$alpha + input$success
+beta_neg = input$beta + input$trials
+
+thetas = rbeta(Nrep, alpha_neg, beta_neg)
+
+ys = rnbinom(Nrep, input$success, thetas)
+
+hist(ys)
+})
+
+  
+  
+  
+}
+
+shinyApp(ui = ui, server = server)
+
+
+```
+
